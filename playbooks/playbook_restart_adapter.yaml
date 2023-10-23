@@ -1,0 +1,14 @@
+---
+- hosts: all
+  tasks:
+  - name: Get the NYC 1 name and write to a var
+    win_shell: |
+      Get-NetAdapter -Name * | Select -ExpandProperty Name | Select-Object -Last 1
+    register: str1
+  - name: Get the NYC 2 name and write to a var
+    win_shell: |
+      Get-NetAdapter -Name * | Select -ExpandProperty Name | Select-Object -Last 2
+    register: str2
+  - name: Restart the Network Adapters
+    win_shell: |
+      Restart-NetAdapter -Name "{{str1}}","{{str2}}"

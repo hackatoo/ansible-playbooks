@@ -1,0 +1,24 @@
+---
+- hosts: all
+  pre_tasks:
+    - name: Check if IIS Service exists
+      raw: cmd /c sc query IISADMIN
+      register: service_output
+      ignore_error: yes 
+
+    - name: First install include
+      import_tasks: first_install.yaml
+      when: service_output.stdout.find('The specified service does not exist as an installed service') != -1)
+
+  tasks:
+    - name: Get the formatted list of ID's 
+      win_shell:  |
+        Get-IISSite | Select -ExpandProperty "ID"
+      when: (confirm_delete.user_input | bool)
+      register: annoying
+    - name: Find the MAX id to make a when condition
+      set_fact:
+            iis_id_list: "{{ annoying.stdout_lines | max }}"
+    - name: Additional install include 
+      import_tasks: add_install.yaml
+      when: iis_id_list < '6'

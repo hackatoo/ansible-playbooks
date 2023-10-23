@@ -1,0 +1,17 @@
+---
+- hosts: all 
+  tasks: 
+
+  - name: Perform a GET request to Toolbox URL, get a status code
+    ansible.windows.win_uri:
+      url: "{{ tb_uri }}"
+    register: annoying
+
+  - set_fact: 
+          response_status: "{{ annoying.status_code }}"
+
+  - name: Verbose to console the result
+    debug:
+      msg: "TB http response status is {{ response_status }}"
+    when: response_status == "200"
+          

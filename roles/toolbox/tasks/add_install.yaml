@@ -1,0 +1,76 @@
+---
+- hosts: all
+  vars_files:
+    - ~/ansible/ansible-main/roles/toolbox/vars/aws.yaml
+  vars_prompt:
+    - name: domain
+      prompt: 'Domain name (Example: amsh1.toolbox-web.com)'
+      private: false
+
+    - name: company
+      prompt: 'Company name (Example: amsh1)'
+      private: false
+  tasks:
+    - name: 
+      debug:
+          msg: 
+            - "Check the links below:"
+            - '"{{ TBfront }}" Frontend'
+            -  '"{{ TBback }}" Backend"'
+            - '"{{ dotnet }}" Dotnet'
+    - name: Confirm the actuality of TB download links
+      pause:
+        prompt: "Are you checked the actuall links? (yes/no)"
+      register: confirm_delete
+
+    - name: Get the formatted list of ID's 
+      win_shell:  |
+        Get-IISSite | Select -ExpandProperty "ID"
+      when: (confirm_delete.user_input | bool)
+      register: annoying
+    
+    - name: Find the MAX id to make a when condition
+      set_fact:
+            iis_id_list: "{{ annoying.stdout_lines | max }}"
+          
+    - name: Additional install include 
+      import_tasks: add_install.yaml
+      when: iis_id_list < '6'
+
+    - name: Breaking from choosing
+      fail: 
+        msg: "The execution has failed because TB instance is FULL. Order new one server."
+      when: iis_id_list > '6'
+
+    - name: Adding Route 53 A Record  
+      route53:
+        aws_access_key: "{{ aws_access_key }}"
+        aws_secret_key: "{{ aws_secret_key }}"
+        state: present
+        zone: toolbox-web.com
+        record: "{{ domain }}"
+        type: A
+        ttl: 300
+        value: "{{ ansible.host }}"
+        wait: yes
+      register: result
+      delegate_to: localhost
+
+    - name: PS script to configure WinRM Certificate Authentication
+      ansible.windows.win_powershell:
+        script: |
+            Import-Module WebAdministration
+            Remove-WebSIte -name 'Default Web Site' -confirm:$False
+            New-Item IIS:\AppPools\TB_$nameofcompany
+            Set-ItemProperty IIS:\AppPools\TB_$nameofcompany -Name "managedRuntimeVersion" -Value ""
+            Set-ItemProperty IIS:\AppPools\TB_$nameofcompany -Name processModel.idleTimeout -Value "0"
+            Set-ItemProperty IIS:\AppPools\TB_$nameofcompany -Name processModel.loadUserProfile -Value "True"
+            Set-ItemProperty IIS:\AppPools\TB_$nameofcompany -Name Recycling.periodicRestart.time -Value 0.00:00:00
+            New-NetFirewallRule -DisplayName "Port for work ToolBox 443" -Direction Inbound -LocalPort "443" -Protocol TCP -Action Allow
+            New-WebSite -Name "TB_$nameofcompany" -PhysicalPath "$dirtb\actual" -Port 80 -ApplicationPool "TB_$nameofcompany" -HostHeader $dns
+            wacs.exe --source iis --siteid 1 --validation selfhosting --order single --csr rsa  --certificatestore My --pfxpassword jkdjkf6Yhf8 --installation iis --installationsiteid 1 --sslport 443 --accepttos --emailaddress 1 --force
+            IISReset /restart
+        parameters:
+          nameofcompany: "{{ company }}"
+          dirtb: "{{ tb_dir }}"
+          dns: "{{ domain }}"

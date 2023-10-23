@@ -1,0 +1,11 @@
+---
+- hosts: win
+  tasks:
+  - name: Find all services that start with 'mt5*'
+    ansible.windows.win_service_info:
+      name: mt5*
+    register: display_name
+  - debug:
+      msg: "{{item.name}}"
+    loop:
+       "{{ (display_name.services | flatten) }}"
